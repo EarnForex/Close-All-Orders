@@ -1,6 +1,6 @@
 #property link          "https://www.earnforex.com/metatrader-scripts/close-all-orders/"
-#property version       "1.01"
-#property copyright     "EarnForex.com - 2020-2023"
+#property version       "1.02"
+#property copyright     "EarnForex.com - 2020-2025"
 #property description   "A script to close all positions."
 #property description   ""
 #property description   "WARNING: There is no guarantee that this script will work as intended. Use at your own risk."
@@ -40,6 +40,7 @@ input int Slippage = 2;               // Slippage
 input int Delay = 0;                  // Delay to wait between closing attempts (in milliseconds)
 input int Retries = 10;               // How many times to try closing each position
 input ENUM_SORT_ORDERS Sort = SORT_ORDERS_NO; // Sort positions for closing?
+input int ClosePercentage = 100;      // Close percentage
 
 // Global variables:
 double PositionsByProfit[][2]; // To sort positions by floating profit (if necessary).
@@ -118,10 +119,31 @@ void CloseOrder(ulong ticket = 0)
             return;
         }
     }
+
+    double CloseVolume = PositionGetDouble(POSITION_VOLUME);
+    if (ClosePercentage < 100)
+    {
+        CloseVolume = (CloseVolume * ClosePercentage) / 100.0;
+        double vol_min = SymbolInfoDouble(PositionGetString(POSITION_SYMBOL), SYMBOL_VOLUME_MIN);
+        double vol_step = SymbolInfoDouble(PositionGetString(POSITION_SYMBOL), SYMBOL_VOLUME_STEP);
+
+        if (CloseVolume < vol_min) CloseVolume = vol_min;
+        else
+        {
+            double steps = 0;
+            if (vol_step != 0) steps = CloseVolume / vol_step;
+            if (MathFloor(steps) < steps)
+            {
+                CloseVolume = MathFloor(steps) * vol_step; // Close the smallest part of the volume possible.
+            }
+        }
+    }
+
     // Try to close the trade in a cycle to overcome temporary failures.
     for (int try = 0; try < Retries; try++)
     {
-        bool result = Trade.PositionClose(PositionGetInteger(POSITION_TICKET), Slippage);
+        //bool result = Trade.PositionClose(PositionGetInteger(POSITION_TICKET), Slippage);
+        bool result = Trade.PositionClosePartial(PositionGetInteger(POSITION_TICKET), CloseVolume, Slippage);
 
         // If there was an error, log it.
         if (!result) Print("ERROR - Unable to close the position - ", PositionGetInteger(POSITION_TICKET), " - Error ", GetLastError());

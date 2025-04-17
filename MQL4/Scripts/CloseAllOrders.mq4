@@ -1,7 +1,7 @@
 #property link          "https://www.earnforex.com/metatrader-scripts/close-all-orders/"
-#property version       "1.01"
+#property version       "1.02"
 #property strict
-#property copyright     "EarnForex.com - 2020-2023"
+#property copyright     "EarnForex.com - 2020-2025"
 #property description   "A script to close all the open market orders."
 #property description   ""
 #property description   "WARNING: There is no guarantee that this script will work as intended. Use at your own risk."
@@ -38,6 +38,7 @@ input int Slippage = 2;               // Slippage
 input int Delay = 0;                  // Delay to wait between closing attempts (in milliseconds)
 input int Retries = 10;               // How many times to try closing each order
 input ENUM_SORT_ORDERS Sort = SORT_ORDERS_NO; // Sort orders for closing?
+input int ClosePercentage = 100;      // Close percentage
 
 // Global variables:
 double PositionsByProfit[][2]; // To sort orders by floating profit (if necessary).
@@ -114,6 +115,26 @@ void CloseOrder(int ticket = 0)
             return;
         }
     }
+
+    double CloseVolume = OrderLots();
+    if (ClosePercentage < 100)
+    {
+        CloseVolume = (CloseVolume * ClosePercentage) / 100.0;
+        double vol_min = SymbolInfoDouble(OrderSymbol(), SYMBOL_VOLUME_MIN);
+        double vol_step = SymbolInfoDouble(OrderSymbol(), SYMBOL_VOLUME_STEP);
+
+        if (CloseVolume < vol_min) CloseVolume = vol_min;
+        else
+        {
+            double steps = 0;
+            if (vol_step != 0) steps = CloseVolume / vol_step;
+            if (MathFloor(steps) < steps)
+            {
+                CloseVolume = MathFloor(steps) * vol_step; // Close the smallest part of the volume possible.
+            }
+        }
+    }
+
     // Try to close the trade in a cycle to overcome temporary failures.
     for (int try = 0; try < Retries; try++)
     {
@@ -129,11 +150,11 @@ void CloseOrder(int ticket = 0)
         // Closing the order using the correct price depending on the order's type.
         if (OrderType() == OP_BUY)
         {
-            result = OrderClose(OrderTicket(), OrderLots(), BidPrice, Slippage);
+            result = OrderClose(OrderTicket(), CloseVolume, BidPrice, Slippage);
         }
         if (OrderType() == OP_SELL)
         {
-            result = OrderClose(OrderTicket(), OrderLots(), AskPrice, Slippage);
+            result = OrderClose(OrderTicket(), CloseVolume, AskPrice, Slippage);
         }
 
         // If there was an error, log it.
